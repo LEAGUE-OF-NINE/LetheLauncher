@@ -77,6 +77,47 @@ public class DownloadService : IDisposable
         StatusChanged?.Invoke("Download complete!");
     }
 
+    public async Task DownloadAdditionalDllsAsync()
+    {
+        var additionalFiles = new[]
+        {
+            new { Url = "https://api.lethelc.site/Lethe.dll", FileName = "Lethe.dll" },
+            new { Url = "https://api.lethelc.site/ModularSkillScripts.dll", FileName = "ModularSkillScripts.dll" }
+        };
+
+        foreach (var file in additionalFiles)
+        {
+            try
+            {
+                StatusChanged?.Invoke($"Downloading {file.FileName}...");
+
+                // Ensure BepInEx/plugins directory exists
+                var pluginsDir = Path.Combine("BepInEx", "plugins");
+                Directory.CreateDirectory(pluginsDir);
+
+                var filePath = Path.Combine(pluginsDir, file.FileName);
+
+                var fileData = await DownloadFileDirectAsync(file.Url);
+                await File.WriteAllBytesAsync(filePath, fileData);
+
+                Console.WriteLine($"Downloaded additional DLL: {file.FileName} ({FormatBytes(fileData.Length)})");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error downloading {file.FileName}: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task<byte[]> DownloadFileDirectAsync(string url)
+    {
+        using (var response = await _httpClient.GetAsync(url))
+        {
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsByteArrayAsync();
+        }
+    }
+
     private async Task<byte[]> DownloadWithProgressAsync(string url, long expectedSize, long baseProcessedBytes, long totalBytes)
     {
         using (var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))

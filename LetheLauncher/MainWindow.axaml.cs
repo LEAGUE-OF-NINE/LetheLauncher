@@ -303,15 +303,20 @@ public partial class MainWindow : Window
                 await _downloadService.DownloadFilesAsync(filesToDownload, _processedBytes, _totalBytes);
             }
             await UpdateFilePath("Download complete!");
-            await StartGameAfterUpdate();
         }
         else
         {
             await UpdateFilePath("All files are up to date!");
-
-            // Start game when all files are up to date
-            await StartGameAfterUpdate();
         }
+
+        // Download additional DLLs not in manifest (always download these)
+        if (_downloadService != null)
+        {
+            await _downloadService.DownloadAdditionalDllsAsync();
+        }
+
+        // Start game after all downloads are complete
+        await StartGameAfterUpdate();
     }
 
     private Task<bool> CheckFileSize(FileEntry fileEntry)
