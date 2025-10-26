@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Hashing;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -20,6 +21,12 @@ public class DownloadService : IDisposable
     public DownloadService()
     {
         _httpClient = new HttpClient();
+    }
+
+    public static string GetLocalGameFolderPath()
+    {
+        var homeDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return Path.Combine(homeDirectory, "Library", "Application Support", "CrossOver", "Bottles", "Steam", "drive_c", "Program Files (x86)", "Steam", "steamapps", "common", "Limbus Company");
     }
 
     public async Task<FileManifest?> DownloadManifestAsync()
@@ -44,33 +51,43 @@ public class DownloadService : IDisposable
         var downloadedCount = 0;
         var totalFiles = filesToDownload.Count;
         var processedBytes = totalBytesProcessed;
+        var localGameFolderPath = GetLocalGameFolderPath();
 
         foreach (var fileEntry in filesToDownload)
         {
             try
             {
                 downloadedCount++;
-                StatusChanged?.Invoke($"Downloading {fileEntry.Path}...");
 
-                var downloadUrl = DownloadBaseUrl + fileEntry.Path;
-                var fileData = await DownloadWithProgressAsync(downloadUrl, fileEntry.Size, processedBytes, totalBytes);
+                // First try to get the file from local folder
+                StatusChanged?.Invoke($"Checking local for {fileEntry.Path}...");
+                bool copiedFromLocal = await TryGetFileFromLocalAsync(fileEntry, localGameFolderPath);
 
-                // Ensure directory exists
-                var directory = Path.GetDirectoryName(fileEntry.Path);
-                if (!string.IsNullOrEmpty(directory))
+                if (!copiedFromLocal)
                 {
-                    Directory.CreateDirectory(directory);
+                    // Fall back to downloading
+                    StatusChanged?.Invoke($"Downloading {fileEntry.Path}...");
+
+                    var downloadUrl = DownloadBaseUrl + fileEntry.Path;
+                    var fileData = await DownloadWithProgressAsync(downloadUrl, fileEntry.Size, processedBytes, totalBytes);
+
+                    // Ensure directory exists
+                    var directory = Path.GetDirectoryName(fileEntry.Path);
+                    if (!string.IsNullOrEmpty(directory))
+                    {
+                        Directory.CreateDirectory(directory);
+                    }
+
+                    await File.WriteAllBytesAsync(fileEntry.Path, fileData);
+                    Console.WriteLine($"Downloaded: {fileEntry.Path} ({FormatBytes(fileEntry.Size)})");
                 }
 
-                await File.WriteAllBytesAsync(fileEntry.Path, fileData);
-                Console.WriteLine($"Downloaded: {fileEntry.Path} ({FormatBytes(fileEntry.Size)})");
-
-                // Add downloaded bytes to processed bytes
+                // Add processed bytes regardless of source (local copy or download)
                 processedBytes += fileEntry.Size;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error downloading {fileEntry.Path}: {ex.Message}");
+                Console.WriteLine($"Error processing {fileEntry.Path}: {ex.Message}");
             }
         }
 
@@ -107,6 +124,77 @@ public class DownloadService : IDisposable
                 Console.WriteLine($"Error downloading {file.FileName}: {ex.Message}");
             }
         }
+    }
+
+    public async Task<bool> TryGetFileFromLocalAsync(FileEntry fileEntry, string localGameFolderPath)
+    {
+        try
+        {
+            var localFilePath = Path.Combine(localGameFolderPath, fileEntry.Path);
+
+            // Check if file exists locally
+            if (!File.Exists(localFilePath))
+            {
+                return false;
+            }
+
+            // Check file size first (quick check)
+            var fileInfo = new FileInfo(localFilePath);
+            if (fileInfo.Length != fileEntry.Size)
+            {
+                return false;
+            }
+
+            // Check XXHash to ensure file integrity
+            var localFileHash = await ComputeXxHashAsync(localFilePath);
+            if (localFileHash != fileEntry.XxHash)
+            {
+                return false;
+            }
+
+            // File matches! Copy it to the target location
+            var targetPath = fileEntry.Path;
+            var targetDirectory = Path.GetDirectoryName(targetPath);
+            if (!string.IsNullOrEmpty(targetDirectory))
+            {
+                Directory.CreateDirectory(targetDirectory);
+            }
+
+            using (var sourceStream = new FileStream(localFilePath, FileMode.Open, FileAccess.Read))
+            using (var targetStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write))
+            {
+                await sourceStream.CopyToAsync(targetStream);
+            }
+
+            Console.WriteLine($"Copied from local: {fileEntry.Path} ({FormatBytes(fileEntry.Size)})");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error checking/copying local file {fileEntry.Path}: {ex.Message}");
+            return false;
+        }
+    }
+
+    private async Task<string> ComputeXxHashAsync(string filePath)
+    {
+        const int bufferSize = 64 * 1024; // 64KB chunks for efficient reading
+        var buffer = new byte[bufferSize];
+        var xxHash = new XxHash64();
+
+        using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true))
+        {
+            int bytesRead;
+            while ((bytesRead = await fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+            {
+                // Append the chunk to the hash computation
+                xxHash.Append(buffer.AsSpan(0, bytesRead));
+            }
+        }
+
+        // Get the final hash as a UInt64 and convert to hex string
+        var hashValue = xxHash.GetCurrentHashAsUInt64();
+        return hashValue.ToString("x16"); // 16-character lowercase hex string
     }
 
     private async Task<byte[]> DownloadFileDirectAsync(string url)
