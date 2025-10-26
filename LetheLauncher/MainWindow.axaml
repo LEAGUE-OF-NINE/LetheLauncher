@@ -1,0 +1,34 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="200"
+        x:Class="LetheLauncher.MainWindow"
+        Title="LetheLauncher"
+        Width="500"
+        Height="200"
+        CanResize="false"
+        WindowStartupLocation="CenterScreen">
+
+    <Grid>
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="20">
+            <TextBlock x:Name="StatusText" Text="Updating Lethe..."
+                       FontSize="18"
+                       HorizontalAlignment="Center"
+                       FontWeight="SemiBold"/>
+
+            <ProgressBar x:Name="UpdateProgressBar"
+                         Width="400"
+                         Height="20"
+                         Minimum="0"
+                         Maximum="100"
+                         Value="0"/>
+
+            <TextBlock x:Name="PercentageText"
+                       Text="0%"
+                       HorizontalAlignment="Center"
+                       FontSize="14"
+                       Foreground="Gray"/>
+        </StackPanel>
+    </Grid>
+</Window>
