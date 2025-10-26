@@ -263,27 +263,35 @@ public partial class MainWindow : Window
         {
             if (!File.Exists(fileEntry.Path)) return false;
 
-            // For now, implement a basic hash check
-            // TODO: Implement proper XXHash64 when package issues are resolved
-            var fileBytes = await File.ReadAllBytesAsync(fileEntry.Path);
-
-            // Simple placeholder hash check - this should be replaced with XXHash64
-            using (var sha256 = System.Security.Cryptography.SHA256.Create())
-            {
-                var hash = sha256.ComputeHash(fileBytes);
-                var hashString = Convert.ToHexString(hash).ToLowerInvariant();
-
-                // For demo purposes, always return true since we don't have XXHash yet
-                // In production, this would compare against the actual XXHash
-                Console.WriteLine("Hash check temporarily skipped (XXHash not implemented yet)");
-                return true;
-            }
+            var computedHash = await ComputeXxHashAsync(fileEntry.Path);
+            return computedHash == fileEntry.XxHash;
         }
         catch (Exception ex)
         {
             Console.WriteLine("Error checking hash for " + fileEntry.Path + ": " + ex.Message);
             return false;
         }
+    }
+
+    private async Task<string> ComputeXxHashAsync(string filePath)
+    {
+        const int bufferSize = 64 * 1024; // 64KB chunks for efficient reading
+        var buffer = new byte[bufferSize];
+        var xxHash = new XxHash64();
+
+        using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true))
+        {
+            int bytesRead;
+            while ((bytesRead = await fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+            {
+                // Append the chunk to the hash computation
+                xxHash.Append(buffer.AsSpan(0, bytesRead));
+            }
+        }
+
+        // Get the final hash as a UInt64 and convert to hex string
+        var hashValue = xxHash.GetCurrentHashAsUInt64();
+        return hashValue.ToString("x16"); // 16-character lowercase hex string
     }
 
     private async Task DownloadFiles(List<FileEntry> filesToDownload)
