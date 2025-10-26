@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Hashing;
+using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -22,6 +23,8 @@ public partial class MainWindow : Window
     private FileManifest? _manifest;
     private int _totalFilesToCheck;
     private int _checkedFiles;
+    private long _totalBytes;
+    private long _processedBytes;
 
     public MainWindow()
     {
@@ -152,24 +155,26 @@ public partial class MainWindow : Window
     {
         try
         {
-            await UpdateStatus("Downloading manifest...");
+            await UpdateFilePath("Downloading manifest...");
             await DownloadManifest();
 
             if (_manifest == null)
             {
-                await UpdateStatus("Failed to download manifest");
+                await UpdateFilePath("Failed to download manifest");
                 return;
             }
 
             _totalFilesToCheck = _manifest.Files.Count;
-            await UpdateStatus($"Checking {_totalFilesToCheck} files...");
+            _totalBytes = _manifest.Files.Sum(f => f.Size);
+            _processedBytes = 0;
+            await UpdateFilePath("Checking " + _totalFilesToCheck + " files...");
 
             await PerformFileChecks();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error during file synchronization: {ex.Message}");
-            await UpdateStatus("Synchronization failed");
+            Console.WriteLine("Error during file synchronization: " + ex.Message);
+            await UpdateFilePath("Synchronization failed");
         }
     }
 
@@ -177,7 +182,16 @@ public partial class MainWindow : Window
     {
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            StatusText.Text = status;
+            // Keep the main status as "Updating Lethe..." always
+            StatusText.Text = "Updating Lethe...";
+        });
+    }
+
+    private async Task UpdateFilePath(string filePath)
+    {
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            FilePathText.Text = filePath;
         });
     }
 
@@ -205,42 +219,49 @@ public partial class MainWindow : Window
         foreach (var fileEntry in _manifest.Files)
         {
             _checkedFiles++;
-            var progress = (double)_checkedFiles / _totalFilesToCheck * 100;
-
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                UpdateProgressBar.Value = progress;
-                PercentageText.Text = $"{progress:F0}%";
-            });
-
             var filePath = fileEntry.Path;
-            await UpdateStatus("Checking " + filePath + "...");
+            await UpdateFilePath("Checking " + filePath + "...");
 
             // First check: file size
             if (!await CheckFileSize(fileEntry))
             {
                 Console.WriteLine("File size mismatch or missing: " + filePath);
                 filesToDownload.Add(fileEntry);
-                continue;
+            }
+            else
+            {
+                // Second check: XXHash if size matches
+                if (!await CheckFileHash(fileEntry))
+                {
+                    Console.WriteLine("File hash mismatch: " + filePath);
+                    filesToDownload.Add(fileEntry);
+                }
+                else
+                {
+                    // File is valid, count its bytes as processed
+                    _processedBytes += fileEntry.Size;
+                }
             }
 
-            // Second check: XXHash if size matches
-            if (!await CheckFileHash(fileEntry))
+            // Update progress based on bytes processed vs total bytes
+            var progress = _totalBytes > 0 ? (double)_processedBytes / _totalBytes * 100 : 0;
+            await Dispatcher.UIThread.InvokeAsync(() =>
             {
-                Console.WriteLine("File hash mismatch: " + filePath);
-                filesToDownload.Add(fileEntry);
-            }
+                UpdateProgressBar.Value = progress;
+                PercentageText.Text = progress.ToString("F1") + "%";
+                DownloadProgressText.Text = FormatBytes(_processedBytes) + " / " + FormatBytes(_totalBytes);
+            });
         }
 
         // Download missing/corrupted files
         if (filesToDownload.Count > 0)
         {
-            await UpdateStatus($"Downloading {filesToDownload.Count} files...");
+            await UpdateFilePath("Downloading " + filesToDownload.Count + " files...");
             await DownloadFiles(filesToDownload);
         }
         else
         {
-            await UpdateStatus("All files are up to date!");
+            await UpdateFilePath("All files are up to date!");
         }
     }
 
@@ -304,18 +325,11 @@ public partial class MainWindow : Window
             try
             {
                 downloadedCount++;
-                var progress = (double)downloadedCount / totalFiles * 100;
 
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    UpdateProgressBar.Value = progress;
-                    PercentageText.Text = $"{progress:F0}%";
-                });
-
-                await UpdateStatus("Downloading " + fileEntry.Path + "...");
+                await UpdateFilePath("Downloading " + fileEntry.Path + "...");
 
                 var downloadUrl = DownloadBaseUrl + fileEntry.Path;
-                var fileData = await _httpClient.GetByteArrayAsync(downloadUrl);
+                var fileData = await DownloadWithProgress(downloadUrl, fileEntry.Size);
 
                 // Ensure directory exists
                 var directory = Path.GetDirectoryName(fileEntry.Path);
@@ -325,7 +339,19 @@ public partial class MainWindow : Window
                 }
 
                 await File.WriteAllBytesAsync(fileEntry.Path, fileData);
-                Console.WriteLine("Downloaded: " + fileEntry.Path);
+                Console.WriteLine("Downloaded: " + fileEntry.Path + " (" + FormatBytes(fileEntry.Size) + ")");
+
+                // Add downloaded bytes to processed bytes
+                _processedBytes += fileEntry.Size;
+
+                // Update overall progress based on total progress
+                var progress = _totalBytes > 0 ? (double)_processedBytes / _totalBytes * 100 : 0;
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    UpdateProgressBar.Value = progress;
+                    PercentageText.Text = progress.ToString("F1") + "%";
+                    DownloadProgressText.Text = FormatBytes(_processedBytes) + " / " + FormatBytes(_totalBytes);
+                });
             }
             catch (Exception ex)
             {
@@ -333,7 +359,51 @@ public partial class MainWindow : Window
             }
         }
 
-        await UpdateStatus("Download complete!");
+        await UpdateFilePath("Download complete!");
+    }
+
+    private async Task<byte[]> DownloadWithProgress(string url, long expectedSize)
+    {
+        using (var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
+        {
+            response.EnsureSuccessStatusCode();
+
+            var buffer = new byte[8192];
+            var totalRead = 0L;
+            var content = new MemoryStream();
+
+            using (var stream = await response.Content.ReadAsStreamAsync())
+            {
+                int read;
+                while ((read = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                {
+                    await content.WriteAsync(buffer, 0, read);
+                    totalRead += read;
+
+                    // Update progress with partial download progress
+                    var currentFileBytes = _processedBytes + totalRead;
+                    var progress = _totalBytes > 0 ? (double)currentFileBytes / _totalBytes * 100 : 0;
+
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        UpdateProgressBar.Value = progress;
+                        PercentageText.Text = progress.ToString("F1") + "%";
+                        DownloadProgressText.Text = FormatBytes(currentFileBytes) + " / " + FormatBytes(_totalBytes) +
+                                                  " (" + FormatBytes(totalRead) + " / " + FormatBytes(expectedSize) + ")";
+                    });
+                }
+            }
+
+            return content.ToArray();
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return (bytes / 1024.0).ToString("F1") + " KB";
+        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024.0 * 1024.0)).ToString("F1") + " MB";
+        return (bytes / (1024.0 * 1024.0 * 1024.0)).ToString("F1") + " GB";
     }
 
     protected override void OnClosed(EventArgs e)

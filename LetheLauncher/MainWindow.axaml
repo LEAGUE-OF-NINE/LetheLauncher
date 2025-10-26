@@ -2,33 +2,47 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="200"
+        mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="220"
         x:Class="LetheLauncher.MainWindow"
-        Title="LetheLauncher"
-        Width="500"
-        Height="200"
+        Title="Lethe Launcher"
+        Width="700"
+        Height="220"
         CanResize="false"
         WindowStartupLocation="CenterScreen">
 
     <Grid>
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="20">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="15">
             <TextBlock x:Name="StatusText" Text="Updating Lethe..."
                        FontSize="18"
                        HorizontalAlignment="Center"
                        FontWeight="SemiBold"/>
 
             <ProgressBar x:Name="UpdateProgressBar"
-                         Width="400"
+                         Width="600"
                          Height="20"
                          Minimum="0"
                          Maximum="100"
                          Value="0"/>
 
-            <TextBlock x:Name="PercentageText"
-                       Text="0%"
-                       HorizontalAlignment="Center"
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="20">
+                <TextBlock x:Name="PercentageText"
+                           Text="0%"
+                           FontSize="14"
+                           Foreground="Gray"/>
+
+                <TextBlock x:Name="DownloadProgressText"
+                           Text=""
+                           FontSize="14"
+                           Foreground="Gray"/>
+            </StackPanel>
+
+            <TextBlock x:Name="FilePathText"
+                       Text=""
                        FontSize="14"
-                       Foreground="Gray"/>
+                       Foreground="Gray"
+                       HorizontalAlignment="Center"
+                       TextWrapping="Wrap"
+                       MaxWidth="650"/>
         </StackPanel>
     </Grid>
 </Window>
