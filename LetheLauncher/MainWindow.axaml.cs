@@ -51,15 +51,15 @@ public partial class MainWindow : Window
             ReadConfigFile();
 
             // Log the configuration (for debugging)
-            Console.WriteLine($"Configuration loaded from {_configFilePath}:");
+            Logger.WriteLine($"Configuration loaded from {_configFilePath}:");
             foreach (var kvp in _config)
             {
-                Console.WriteLine($"  {kvp.Key} = {kvp.Value}");
+                Logger.WriteLine($"  {kvp.Key} = {kvp.Value}");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error initializing configuration: {ex.Message}");
+            Logger.WriteLine($"Error initializing configuration: {ex.Message}");
         }
     }
 
@@ -69,11 +69,11 @@ public partial class MainWindow : Window
         {
             var defaultConfig = "DisableAutoUpdate=false\n";
             File.WriteAllText(_configFilePath, defaultConfig);
-            Console.WriteLine($"Created default configuration file: {_configFilePath}");
+            Logger.WriteLine($"Created default configuration file: {_configFilePath}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error creating config file: {ex.Message}");
+            Logger.WriteLine($"Error creating config file: {ex.Message}");
         }
     }
 
@@ -103,7 +103,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error reading config file: {ex.Message}");
+            Logger.WriteLine($"Error reading config file: {ex.Message}");
         }
     }
 
@@ -124,7 +124,7 @@ public partial class MainWindow : Window
                 IsVisible = false;
             });
 
-            Console.WriteLine("DisableAutoUpdate=true detected. UI hidden, skipping file synchronization.");
+            Logger.WriteLine("DisableAutoUpdate=true detected. UI hidden, skipping file synchronization.");
 
             // Launch the game directly
             GameStarter.StartGame();
@@ -137,7 +137,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Error in direct game start: " + ex.Message);
+            Logger.WriteLine("Error in direct game start: " + ex.Message);
             // Don't show UI on error when in hidden mode, just exit
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -171,7 +171,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Error during file synchronization: " + ex.Message);
+            Logger.WriteLine("Error during file synchronization: " + ex.Message);
             await UpdateFilePath("Synchronization failed");
         }
     }
@@ -230,7 +230,7 @@ public partial class MainWindow : Window
                 IsVisible = false;
             });
 
-            Console.WriteLine("Update complete. Starting game...");
+            Logger.WriteLine("Update complete. Starting game...");
 
             // Launch the game
             GameStarter.StartGame();
@@ -243,7 +243,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Error starting game after update: " + ex.Message);
+            Logger.WriteLine("Error starting game after update: " + ex.Message);
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 Close();
@@ -266,7 +266,7 @@ public partial class MainWindow : Window
             // First check: file size
             if (!await CheckFileSize(fileEntry))
             {
-                Console.WriteLine("File size mismatch or missing: " + filePath);
+                Logger.WriteLine("File size mismatch or missing: " + filePath);
                 filesToDownload.Add(fileEntry);
             }
             else
@@ -274,7 +274,7 @@ public partial class MainWindow : Window
                 // Second check: XXHash if size matches
                 if (!await CheckFileHash(fileEntry))
                 {
-                    Console.WriteLine("File hash mismatch: " + filePath);
+                    Logger.WriteLine("File hash mismatch: " + filePath);
                     filesToDownload.Add(fileEntry);
                 }
                 else
@@ -343,7 +343,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Error checking hash for " + fileEntry.Path + ": " + ex.Message);
+            Logger.WriteLine("Error checking hash for " + fileEntry.Path + ": " + ex.Message);
             return false;
         }
     }

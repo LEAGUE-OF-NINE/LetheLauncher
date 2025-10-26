@@ -7,6 +7,7 @@
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
         <ApplicationIcon>Assets\icon-192.ico</ApplicationIcon>
+        <AssemblyName>LimbusCompany</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
@@ -29,4 +30,38 @@
     <ItemGroup>
       <AvaloniaResource Include="Assets\icon-192.ico" />
     </ItemGroup>
+
+    <!-- Windows Distribution Build Properties -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <SelfContained>true</SelfContained>
+        <PublishSingleFile>true</PublishSingleFile>
+        <DistributionFolder>$(OutputPath)distribution</DistributionFolder>
+    </PropertyGroup>
+
+    <!-- Distribution Target -->
+    <Target Name="CreateDistribution" AfterTargets="Publish" Condition="'$(Configuration)' == 'Release' And '$(RuntimeIdentifier)' == 'win-x64'">
+        <PropertyGroup>
+            <PublishFolder>$(PublishDir)</PublishFolder>
+            <DistFolder>$(PublishDir)..\distribution\</DistFolder>
+        </PropertyGroup>
+
+        <!-- Create distribution directory -->
+        <MakeDir Directories="$(DistFolder)" />
+
+        <!-- Copy main executable -->
+        <Copy SourceFiles="$(PublishFolder)$(AssemblyName).exe" DestinationFolder="$(DistFolder)" />
+
+        <!-- Copy required native DLLs -->
+        <Copy SourceFiles="$(PublishFolder)av_libglesv2.dll" DestinationFolder="$(DistFolder)" Condition="Exists('$(PublishFolder)av_libglesv2.dll')" />
+        <Copy SourceFiles="$(PublishFolder)libHarfBuzzSharp.dll" DestinationFolder="$(DistFolder)" Condition="Exists('$(PublishFolder)libHarfBuzzSharp.dll')" />
+        <Copy SourceFiles="$(PublishFolder)libSkiaSharp.dll" DestinationFolder="$(DistFolder)" Condition="Exists('$(PublishFolder)libSkiaSharp.dll')" />
+
+        <Message Text="Distribution package created in: $(DistFolder)" Importance="high" />
+        <Message Text="Files ready for distribution:" Importance="high" />
+        <ItemGroup>
+            <DistFiles Include="$(DistFolder)*.*" />
+        </ItemGroup>
+        <Message Text="  - %(DistFiles.Filename)%(DistFiles.Extension)" Importance="high" />
+    </Target>
 </Project>

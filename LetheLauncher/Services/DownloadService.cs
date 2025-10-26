@@ -42,7 +42,7 @@ public class DownloadService : IDisposable
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error reading Steam path from registry: {ex.Message}");
+                Logger.WriteLine($"Error reading Steam path from registry: {ex.Message}");
             }
 
             // Fallback for Windows if registry read fails
@@ -63,12 +63,12 @@ public class DownloadService : IDisposable
             StatusChanged?.Invoke("Downloading manifest...");
             var response = await _httpClient.GetStringAsync(ManifestUrl);
             var manifest = JsonSerializer.Deserialize<FileManifest>(response);
-            Console.WriteLine($"Downloaded manifest: {manifest?.TotalFiles} files, {manifest?.TotalSize} bytes");
+            Logger.WriteLine($"Downloaded manifest: {manifest?.TotalFiles} files, {manifest?.TotalSize} bytes");
             return manifest;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error downloading manifest: {ex.Message}");
+            Logger.WriteLine($"Error downloading manifest: {ex.Message}");
             return null;
         }
     }
@@ -106,7 +106,7 @@ public class DownloadService : IDisposable
                     }
 
                     await File.WriteAllBytesAsync(fileEntry.Path, fileData);
-                    Console.WriteLine($"Downloaded: {fileEntry.Path} ({FormatBytes(fileEntry.Size)})");
+                    Logger.WriteLine($"Downloaded: {fileEntry.Path} ({FormatBytes(fileEntry.Size)})");
                 }
 
                 // Add processed bytes regardless of source (local copy or download)
@@ -114,7 +114,7 @@ public class DownloadService : IDisposable
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error processing {fileEntry.Path}: {ex.Message}");
+                Logger.WriteLine($"Error processing {fileEntry.Path}: {ex.Message}");
             }
         }
 
@@ -144,11 +144,11 @@ public class DownloadService : IDisposable
                 var fileData = await DownloadFileDirectAsync(file.Url);
                 await File.WriteAllBytesAsync(filePath, fileData);
 
-                Console.WriteLine($"Downloaded additional DLL: {file.FileName} ({FormatBytes(fileData.Length)})");
+                Logger.WriteLine($"Downloaded additional DLL: {file.FileName} ({FormatBytes(fileData.Length)})");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error downloading {file.FileName}: {ex.Message}");
+                Logger.WriteLine($"Error downloading {file.FileName}: {ex.Message}");
             }
         }
     }
@@ -169,6 +169,7 @@ public class DownloadService : IDisposable
             var fileInfo = new FileInfo(localFilePath);
             if (fileInfo.Length != fileEntry.Size)
             {
+                Logger.WriteLine($"Size mismatch for local copy {fileEntry.Path}: expected {fileEntry.Size}, got {fileInfo.Length}");
                 return false;
             }
 
@@ -176,6 +177,7 @@ public class DownloadService : IDisposable
             var localFileHash = await ComputeXxHashAsync(localFilePath);
             if (localFileHash != fileEntry.XxHash)
             {
+                Logger.WriteLine($"Hash mismatch for local copy {fileEntry.Path}: expected {fileEntry.XxHash}, got {localFileHash}");
                 return false;
             }
 
@@ -193,12 +195,12 @@ public class DownloadService : IDisposable
                 await sourceStream.CopyToAsync(targetStream);
             }
 
-            Console.WriteLine($"Copied from local: {fileEntry.Path} ({FormatBytes(fileEntry.Size)})");
+            Logger.WriteLine($"Copied from local: {fileEntry.Path} ({FormatBytes(fileEntry.Size)})");
             return true;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error checking/copying local file {fileEntry.Path}: {ex.Message}");
+            Logger.WriteLine($"Error checking/copying local file {fileEntry.Path}: {ex.Message}");
             return false;
         }
     }
