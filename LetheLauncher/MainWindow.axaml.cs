@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -9,11 +11,87 @@ public partial class MainWindow : Window
 {
     private Timer? _updateTimer;
     private double _currentProgress = 0;
+    private readonly string _configFilePath = "lethe-launcher.ini";
+    private Dictionary<string, string> _config = new();
 
     public MainWindow()
     {
         InitializeComponent();
+        InitializeConfiguration();
         StartProgressSimulation();
+    }
+
+    private void InitializeConfiguration()
+    {
+        try
+        {
+            if (!File.Exists(_configFilePath))
+            {
+                CreateDefaultConfigFile();
+            }
+
+            ReadConfigFile();
+
+            // Log the configuration (for debugging)
+            Console.WriteLine($"Configuration loaded from {_configFilePath}:");
+            foreach (var kvp in _config)
+            {
+                Console.WriteLine($"  {kvp.Key} = {kvp.Value}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing configuration: {ex.Message}");
+        }
+    }
+
+    private void CreateDefaultConfigFile()
+    {
+        try
+        {
+            var defaultConfig = "DisableAutoUpdate=false\n";
+            File.WriteAllText(_configFilePath, defaultConfig);
+            Console.WriteLine($"Created default configuration file: {_configFilePath}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating config file: {ex.Message}");
+        }
+    }
+
+    private void ReadConfigFile()
+    {
+        try
+        {
+            _config.Clear();
+            var lines = File.ReadAllLines(_configFilePath);
+
+            foreach (var line in lines)
+            {
+                var trimmedLine = line.Trim();
+                if (string.IsNullOrEmpty(trimmedLine) || trimmedLine.StartsWith("#") || trimmedLine.StartsWith(";"))
+                {
+                    continue; // Skip empty lines and comments
+                }
+
+                var separatorIndex = trimmedLine.IndexOf('=');
+                if (separatorIndex > 0)
+                {
+                    var key = trimmedLine.Substring(0, separatorIndex).Trim();
+                    var value = trimmedLine.Substring(separatorIndex + 1).Trim();
+                    _config[key] = value;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error reading config file: {ex.Message}");
+        }
+    }
+
+    private string GetConfigValue(string key, string defaultValue = "")
+    {
+        return _config.TryGetValue(key, out var value) ? value : defaultValue;
     }
 
     private void StartProgressSimulation()
