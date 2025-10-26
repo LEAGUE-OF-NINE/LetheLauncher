@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Hashing;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading.Tasks;
 using LetheLauncher.Models;
+using Microsoft.Win32;
 
 namespace LetheLauncher.Services;
 
@@ -25,8 +27,33 @@ public class DownloadService : IDisposable
 
     public static string GetLocalGameFolderPath()
     {
-        var homeDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Path.Combine(homeDirectory, "Library", "Application Support", "CrossOver", "Bottles", "Steam", "drive_c", "Program Files (x86)", "Steam", "steamapps", "common", "Limbus Company");
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            try
+            {
+                // Read Steam installation path from Windows registry
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Valve\Steam"))
+                {
+                    if (key?.GetValue("InstallPath") is string steamPath)
+                    {
+                        return Path.Combine(steamPath, "steamapps", "common", "Limbus Company");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error reading Steam path from registry: {ex.Message}");
+            }
+
+            // Fallback for Windows if registry read fails
+            return Path.Combine("C:", "Program Files (x86)", "Steam", "steamapps", "common", "Limbus Company");
+        }
+        else
+        {
+            // macOS/CrossOver path
+            var homeDirectory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return Path.Combine(homeDirectory, "Library", "Application Support", "CrossOver", "Bottles", "Steam", "drive_c", "Program Files (x86)", "Steam", "steamapps", "common", "Limbus Company");
+        }
     }
 
     public async Task<FileManifest?> DownloadManifestAsync()
