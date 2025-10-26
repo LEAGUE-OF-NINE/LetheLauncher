@@ -6,6 +6,7 @@
         <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
         <ApplicationManifest>app.manifest</ApplicationManifest>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+        <ApplicationIcon>Assets\icon-192.ico</ApplicationIcon>
     </PropertyGroup>
 
     <ItemGroup>
@@ -17,5 +18,15 @@
         <PackageReference Include="System.IO.Hashing" Version="8.0.0"/>
         <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
         <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="Avalonia.Diagnostics" Version="11.1.0"/>
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="..\">
+        <Link>LetheLauncher</Link>
+      </Folder>
+    </ItemGroup>
+
+    <ItemGroup>
+      <AvaloniaResource Include="Assets\icon-192.ico" />
     </ItemGroup>
 </Project>

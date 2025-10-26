@@ -8,7 +8,8 @@
         Width="700"
         Height="220"
         CanResize="false"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Icon="Assets/icon-192.ico">
 
     <Grid>
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="15">
