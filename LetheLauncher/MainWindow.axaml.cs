@@ -27,7 +27,18 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         InitializeConfiguration();
-        StartFileSynchronization();
+
+        // Check if auto-update is disabled
+        if (GetConfigValue("DisableAutoUpdate", "false").ToLowerInvariant() == "true")
+        {
+            // Hide the window completely and launch game directly
+            HideUIAndStartGame();
+        }
+        else
+        {
+            // Normal flow with file synchronization
+            StartFileSynchronization();
+        }
     }
 
     private void InitializeConfiguration()
@@ -101,6 +112,40 @@ public partial class MainWindow : Window
     private string GetConfigValue(string key, string defaultValue = "")
     {
         return _config.TryGetValue(key, out var value) ? value : defaultValue;
+    }
+
+    private async void HideUIAndStartGame()
+    {
+        try
+        {
+            // Completely hide the window
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                WindowState = WindowState.Minimized;
+                ShowInTaskbar = false;
+                IsVisible = false;
+            });
+
+            Console.WriteLine("DisableAutoUpdate=true detected. UI hidden, skipping file synchronization.");
+
+            // Launch the game directly
+            await GameStarter.StartGame();
+
+            // Close the launcher after game starts
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                Close();
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Error in direct game start: " + ex.Message);
+            // Don't show UI on error when in hidden mode, just exit
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                Close();
+            });
+        }
     }
 
     private async void StartFileSynchronization()
