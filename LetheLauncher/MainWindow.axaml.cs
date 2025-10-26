@@ -127,7 +127,7 @@ public partial class MainWindow : Window
             Console.WriteLine("DisableAutoUpdate=true detected. UI hidden, skipping file synchronization.");
 
             // Launch the game directly
-            await GameStarter.StartGame();
+            GameStarter.StartGame();
 
             // Close the launcher after game starts
             await Dispatcher.UIThread.InvokeAsync(() =>
@@ -233,7 +233,7 @@ public partial class MainWindow : Window
             Console.WriteLine("Update complete. Starting game...");
 
             // Launch the game
-            await GameStarter.StartGame();
+            GameStarter.StartGame();
 
             // Close the launcher after game starts
             await Dispatcher.UIThread.InvokeAsync(() =>
