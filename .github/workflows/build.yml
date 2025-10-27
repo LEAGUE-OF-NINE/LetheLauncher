@@ -51,14 +51,39 @@ jobs:
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: LetheLauncher-Distribution
+        name: LetheLauncher-Distribution-${{ github.run_number }}
         path: ./publish/distribution/
         if-no-files-found: error
+        retention-days: 90
 
     - name: Create release assets
       if: github.event_name == 'release'
       uses: softprops/action-gh-release@v2
       with:
         files: ./publish/distribution/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Create pre-release on push to main
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: latest-build-${{ github.run_number }}
+        name: Latest Build (${{ github.run_number }})
+        body: |
+          🚀 **Automatic build from latest commit**
+
+          This is an automated build of the latest changes. For stable releases, check the Releases section.
+
+          **Download the launcher below:**
+          - `LimbusCompany.exe` - Main launcher executable
+          - Required DLLs included in the distribution
+
+          **Changes in this build:**
+          - Built from commit: ${{ github.sha }}
+          - Build number: ${{ github.run_number }}
+        files: ./publish/distribution/*
+        prerelease: true
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
