@@ -1,0 +1,66 @@
+name: Build and Package LetheLauncher
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  release:
+    types: [ published ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 8.0
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore LetheLauncher.sln
+
+    - name: Build solution
+      run: dotnet build LetheLauncher.sln --configuration Release --no-restore
+
+    - name: Publish application
+      run: dotnet publish LetheLauncher/LetheLauncher.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish
+
+    - name: Create distribution package
+      run: |
+        # Create distribution directory
+        mkdir -p ./publish/distribution
+
+        # Copy main executable
+        cp ./publish/LimbusCompany.exe ./publish/distribution/
+
+        # Copy required native DLLs if they exist
+        if (Test-Path ./publish/av_libglesv2.dll) { cp ./publish/av_libglesv2.dll ./publish/distribution/ }
+        if (Test-Path ./publish/libHarfBuzzSharp.dll) { cp ./publish/libHarfBuzzSharp.dll ./publish/distribution/ }
+        if (Test-Path ./publish/libSkiaSharp.dll) { cp ./publish/libSkiaSharp.dll ./publish/distribution/ }
+
+        # List files in distribution
+        echo "Distribution package created:"
+        ls ./publish/distribution/
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: LetheLauncher-Distribution
+        path: ./publish/distribution/
+        if-no-files-found: error
+
+    - name: Create release assets
+      if: github.event_name == 'release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./publish/distribution/LimbusCompany.exe
+        asset_name: LimbusCompany.exe
+        asset_content_type: application/octet-stream
