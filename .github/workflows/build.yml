@@ -17,7 +17,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Setup .NET 8.0
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v4
       with:
         dotnet-version: '8.0.x'
 
@@ -31,24 +31,25 @@ jobs:
       run: dotnet publish LetheLauncher/LetheLauncher.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish
 
     - name: Create distribution package
+      shell: powershell
       run: |
         # Create distribution directory
         mkdir -p ./publish/distribution
 
         # Copy main executable
-        cp ./publish/LimbusCompany.exe ./publish/distribution/
+        Copy-Item ./publish/LimbusCompany.exe ./publish/distribution/
 
         # Copy required native DLLs if they exist
-        if (Test-Path ./publish/av_libglesv2.dll) { cp ./publish/av_libglesv2.dll ./publish/distribution/ }
-        if (Test-Path ./publish/libHarfBuzzSharp.dll) { cp ./publish/libHarfBuzzSharp.dll ./publish/distribution/ }
-        if (Test-Path ./publish/libSkiaSharp.dll) { cp ./publish/libSkiaSharp.dll ./publish/distribution/ }
+        if (Test-Path ./publish/av_libglesv2.dll) { Copy-Item ./publish/av_libglesv2.dll ./publish/distribution/ }
+        if (Test-Path ./publish/libHarfBuzzSharp.dll) { Copy-Item ./publish/libHarfBuzzSharp.dll ./publish/distribution/ }
+        if (Test-Path ./publish/libSkiaSharp.dll) { Copy-Item ./publish/libSkiaSharp.dll ./publish/distribution/ }
 
         # List files in distribution
-        echo "Distribution package created:"
-        ls ./publish/distribution/
+        Write-Host "Distribution package created:"
+        Get-ChildItem ./publish/distribution/
 
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: LetheLauncher-Distribution
         path: ./publish/distribution/
@@ -56,11 +57,8 @@ jobs:
 
     - name: Create release assets
       if: github.event_name == 'release'
-      uses: actions/upload-release-asset@v1
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ./publish/distribution/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./publish/distribution/LimbusCompany.exe
-        asset_name: LimbusCompany.exe
-        asset_content_type: application/octet-stream
