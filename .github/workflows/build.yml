@@ -22,7 +22,7 @@ jobs:
         dotnet-version: '8.0.x'
 
     - name: Restore dependencies
-      run: dotnet restore LetheLauncher.sln
+      run: dotnet restore LetheLauncher.sln --runtime win-x64
 
     - name: Build solution
       run: dotnet build LetheLauncher.sln --configuration Release --no-restore
