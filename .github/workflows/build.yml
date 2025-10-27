@@ -50,11 +50,24 @@ jobs:
         Write-Host "Distribution package created:"
         Get-ChildItem ./publish/distribution/
 
+    - name: Create distribution zip
+      shell: powershell
+      run: |
+        # Create zip file containing all distribution files
+        $zipPath = "./publish/LetheLauncher-Distribution-${{ github.run_number }}.zip"
+        Compress-Archive -Path "./publish/distribution/*" -DestinationPath $zipPath
+
+        # List the created zip file
+        Write-Host "Created distribution zip:"
+        Get-ChildItem $zipPath
+
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: LetheLauncher-Distribution-${{ github.run_number }}
-        path: ./publish/distribution/
+        path: |
+          ./publish/distribution/
+          ./publish/LetheLauncher-Distribution-${{ github.run_number }}.zip
         if-no-files-found: error
         retention-days: 90
 
@@ -62,7 +75,7 @@ jobs:
       if: github.event_name == 'release'
       uses: softprops/action-gh-release@v2
       with:
-        files: ./publish/distribution/*
+        files: ./publish/LetheLauncher-Distribution-${{ github.run_number }}.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -77,14 +90,15 @@ jobs:
 
           This is an automated build of the latest changes. For stable releases, check the Releases section.
 
-          **Download the launcher below:**
-          - `LimbusCompany.exe` - Main launcher executable
-          - Required DLLs included in the distribution
+          **📦 Download (ZIP):**
+          - Download `LetheLauncher-Distribution-${{ github.run_number }}.zip`
+          - Contains the launcher executable and all required DLLs
+          - Extract and run `LimbusCompany.exe` to use
 
           **Changes in this build:**
           - Built from commit: ${{ github.sha }}
           - Build number: ${{ github.run_number }}
-        files: ./publish/distribution/*
+        files: ./publish/LetheLauncher-Distribution-${{ github.run_number }}.zip
         prerelease: true
         generate_release_notes: true
       env:
