@@ -1,105 +1,107 @@
-name: Build and Package LetheLauncher
+name: Build and Release
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
   release:
-    types: [ published ]
+    types: [published]
 
 jobs:
   build:
     runs-on: windows-latest
     permissions:
-      contents: write  # Required to create releases
+      contents: write
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup .NET 8.0
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
-    - name: Restore dependencies
-      run: dotnet restore LetheLauncher.sln --runtime win-x64
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
 
-    - name: Build solution
-      run: dotnet build LetheLauncher.sln --configuration Release --no-restore
+      - name: Install dependencies
+        run: |
+          cd lethe-launcher
+          npm ci
 
-    - name: Publish application
-      run: dotnet publish LetheLauncher/LetheLauncher.csproj --configuration Release --runtime win-x64 --self-contained true --output ./publish
+      - name: Build Tauri app
+        run: |
+          cd lethe-launcher
+          npm run tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
-    - name: Create distribution package
-      shell: powershell
-      run: |
-        # Create distribution directory
-        mkdir -p ./publish/distribution
+      - name: Prepare release artifacts
+        shell: powershell
+        run: |
+          $exe = "lethe-launcher\src-tauri\target\release\LimbusCompany.exe"
+          $zip = "LimbusCompany.zip"
 
-        # Copy main executable
-        Copy-Item ./publish/LimbusCompany.exe ./publish/distribution/
+          # Create zip containing just the exe (no installer)
+          Compress-Archive -Path $exe -DestinationPath $zip
 
-        # Copy required native DLLs if they exist
-        if (Test-Path ./publish/av_libglesv2.dll) { Copy-Item ./publish/av_libglesv2.dll ./publish/distribution/ }
-        if (Test-Path ./publish/libHarfBuzzSharp.dll) { Copy-Item ./publish/libHarfBuzzSharp.dll ./publish/distribution/ }
-        if (Test-Path ./publish/libSkiaSharp.dll) { Copy-Item ./publish/libSkiaSharp.dll ./publish/distribution/ }
+          # Generate latest.json for the updater
+          $version = (Get-Item $exe).VersionInfo.ProductVersion
+          if (-not $version) { $version = "0.0.0" }
 
-        # List files in distribution
-        Write-Host "Distribution package created:"
-        Get-ChildItem ./publish/distribution/
+          $latestJson = @{
+            version = $version
+            notes = "Release ${{ github.ref_name }}"
+            download_url = "https://github.com/${{ github.repository }}/releases/latest/download/LimbusCompany.zip"
+          } | ConvertTo-Json
 
-    - name: Create distribution zip
-      shell: powershell
-      run: |
-        # Create zip file containing all distribution files
-        $zipPath = "./publish/LetheLauncher-Distribution-${{ github.run_number }}.zip"
-        Compress-Archive -Path "./publish/distribution/*" -DestinationPath $zipPath
+          $latestJson | Out-File -FilePath latest.json -Encoding utf8
 
-        # List the created zip file
-        Write-Host "Created distribution zip:"
-        Get-ChildItem $zipPath
+          Write-Host "Build version: $version"
+          Write-Host "Artifacts:"
+          Get-ChildItem $zip, latest.json
 
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: LetheLauncher-Distribution-${{ github.run_number }}
-        path: |
-          ./publish/distribution/
-          ./publish/LetheLauncher-Distribution-${{ github.run_number }}.zip
-        if-no-files-found: error
-        retention-days: 90
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: LimbusCompany-build-${{ github.run_number }}
+          path: |
+            LimbusCompany.zip
+            latest.json
+          if-no-files-found: error
+          retention-days: 14
 
-    - name: Create release assets
-      if: github.event_name == 'release'
-      uses: softprops/action-gh-release@v2
-      with:
-        files: ./publish/LetheLauncher-Distribution-${{ github.run_number }}.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create release assets
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            LimbusCompany.zip
+            latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Create pre-release on push to main
-      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: latest-build-${{ github.run_number }}
-        name: Latest Build (${{ github.run_number }})
-        body: |
-          🚀 **Automatic build from latest commit**
+      - name: Create pre-release on push to main
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly-${{ github.run_number }}
+          name: Nightly Build (${{ github.run_number }})
+          body: |
+            🚀 Automated build from commit `${{ github.sha }}`
 
-          This is an automated build of the latest changes. For stable releases, check the Releases section.
+            Download `LimbusCompany.zip`, extract, and place `LimbusCompany.exe` in your game directory alongside `UnityPlayer.dll`.
 
-          **📦 Download (ZIP):**
-          - Download `LetheLauncher-Distribution-${{ github.run_number }}.zip`
-          - Contains the launcher executable and all required DLLs
-          - Extract and run `LimbusCompany.exe` to use
-
-          **Changes in this build:**
-          - Built from commit: ${{ github.sha }}
-          - Build number: ${{ github.run_number }}
-        files: ./publish/LetheLauncher-Distribution-${{ github.run_number }}.zip
-        prerelease: true
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            The launcher will auto-detect this as the latest version via the updater.
+          files: |
+            LimbusCompany.zip
+            latest.json
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
