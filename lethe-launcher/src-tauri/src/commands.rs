@@ -1,7 +1,8 @@
 use crate::downloader::{download_additional_dlls, download_files, StatusChangeEvent};
 use crate::manifest::FileEntry;
 use crate::verifier::{check_file, load_cache, save_cache, CheckResult};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
@@ -270,4 +271,82 @@ pub async fn check_for_updates() -> Result<Option<crate::updater::UpdateInfo>, S
 #[tauri::command]
 pub async fn download_update(update: crate::updater::UpdateInfo) -> Result<(), String> {
     crate::updater::download_update(&update).await
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ModInfo {
+    pub name: String,
+    pub enabled: bool,
+}
+
+const MODS_REL_PATH: &str = "BepInEx/plugins/Lethe/mods";
+
+/// List all mods in the Lethe mods folder.
+#[tauri::command]
+pub fn get_mods() -> Result<Vec<ModInfo>, String> {
+    let mods_path = Path::new(MODS_REL_PATH);
+
+    let abs_path = std::fs::canonicalize(mods_path)
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| format!("<CWD>/{} (not found)", MODS_REL_PATH));
+    crate::lethe_log!("Looking for mods at: {}", abs_path);
+
+    if !mods_path.exists() {
+        crate::lethe_log!("Mods directory does not exist at {}", abs_path);
+        return Ok(vec![]);
+    }
+
+    let mut mods = vec![];
+    let entries = std::fs::read_dir(mods_path)
+        .map_err(|e| format!("Failed to read mods directory: {}", e))?;
+
+    for entry in entries.flatten() {
+        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().to_string();
+        let (display_name, enabled) = if let Some(stripped) = name.strip_prefix("DISABLED_") {
+            (stripped.to_string(), false)
+        } else if let Some(stripped) = name.strip_prefix("FULLDISABLED_") {
+            (stripped.to_string(), false)
+        } else {
+            (name.clone(), true)
+        };
+        mods.push(ModInfo {
+            name: display_name,
+            enabled,
+        });
+    }
+    mods.sort_by(|a, b| a.name.cmp(&b.name));
+    crate::lethe_log!("Found {} mod(s)", mods.len());
+    Ok(mods)
+}
+
+/// Toggle a mod on/off by renaming its folder.
+#[tauri::command]
+pub fn toggle_mod(name: String) -> Result<ModInfo, String> {
+    let mods_path = Path::new(MODS_REL_PATH);
+
+    let disabled_path = mods_path.join(format!("DISABLED_{}", name));
+    let fulldisabled_path = mods_path.join(format!("FULLDISABLED_{}", name));
+    let enabled_path = mods_path.join(&name);
+
+    if enabled_path.exists() {
+        // Currently enabled -> disable
+        std::fs::rename(&enabled_path, &disabled_path)
+            .map_err(|e| format!("Failed to disable mod: {}", e))?;
+        Ok(ModInfo { name, enabled: false })
+    } else if disabled_path.exists() {
+        // Currently disabled -> enable
+        std::fs::rename(&disabled_path, &enabled_path)
+            .map_err(|e| format!("Failed to enable mod: {}", e))?;
+        Ok(ModInfo { name, enabled: true })
+    } else if fulldisabled_path.exists() {
+        // Currently full-disabled -> enable
+        std::fs::rename(&fulldisabled_path, &enabled_path)
+            .map_err(|e| format!("Failed to enable mod: {}", e))?;
+        Ok(ModInfo { name, enabled: true })
+    } else {
+        Err(format!("Mod '{}' not found", name))
+    }
 }

@@ -30,3 +30,8 @@ export type SyncPhase =
   | 'complete'
   | 'launching'
   | 'error';
+
+export interface ModInfo {
+  name: string;
+  enabled: boolean;
+}

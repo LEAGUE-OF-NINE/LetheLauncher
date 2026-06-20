@@ -17,6 +17,11 @@ pub fn run() {
     // Create default config if missing
     config::create_default_config();
 
+    // Log working directory for debugging
+    if let Ok(cwd) = std::env::current_dir() {
+        lethe_log!("Working directory: {}", cwd.display());
+    }
+
     // Note: DisableAutoUpdate is now a frontend-controlled setting.
     // The UI always loads so the user can login, change settings, and launch.
     tauri::Builder::default()
@@ -41,6 +46,8 @@ pub fn run() {
             commands::download_update,
             commands::get_settings,
             commands::set_setting,
+            commands::get_mods,
+            commands::toggle_mod,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

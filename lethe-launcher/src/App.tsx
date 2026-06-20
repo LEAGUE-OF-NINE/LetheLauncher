@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { StatusPanel } from "./components/StatusPanel";
 import { ProgressBar } from "./components/ProgressBar";
 import { FileIndicator } from "./components/FileIndicator";
 import { LoginButton, UserBadge } from "./components/LoginButton";
 import { UpdateBanner } from "./components/UpdateBanner";
 import { SettingsPanel, SettingsButton } from "./components/SettingsPanel";
+import { ModList } from "./components/ModList";
 import { useLauncher } from "./hooks/useLauncher";
 import { useAuth } from "./hooks/useAuth";
 import { useUpdater } from "./hooks/useUpdater";
@@ -11,6 +13,7 @@ import { useSettings } from "./hooks/useSettings";
 import { useEffect, useRef } from "react";
 
 function App() {
+  const [modsOpen, setModsOpen] = useState(false);
   const {
     auth,
     isAuthenticated,
@@ -29,9 +32,13 @@ function App() {
   } = useUpdater();
   const {
     settings,
+    mods,
     isOpen: settingsOpen,
     setIsOpen: setSettingsOpen,
     toggleValidation,
+    toggleMod,
+    enableAllMods,
+    disableAllMods,
   } = useSettings();
   const syncStarted = useRef(false);
   const {
@@ -89,6 +96,8 @@ function App() {
         ? "Downloading files..."
         : statusMessage;
 
+  const enabledCount = mods.filter((m) => m.enabled).length;
+
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center p-8 gap-8 select-none"
@@ -105,10 +114,67 @@ function App() {
         }}
       />
 
-      {/* Settings gear - top right corner */}
-      <div className="fixed top-4 right-4 z-40">
+      {/* Top-right buttons: Mods pill + Settings gear */}
+      <div className="fixed top-4 right-4 z-40 flex items-center gap-3">
+        {mods.length > 0 && (
+          <button
+            onClick={() => setModsOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 border border-stone-800 hover:border-red-900/50 transition-colors cursor-pointer"
+            style={{ background: "rgba(0,0,0,0.3)" }}
+          >
+            <span className="text-stone-500 text-[10px] uppercase tracking-[0.15em]">
+              Mods
+            </span>
+            <span className="text-stone-700 text-[10px]">
+              {enabledCount}/{mods.length}
+            </span>
+          </button>
+        )}
         <SettingsButton onClick={() => setSettingsOpen(true)} />
       </div>
+
+      {/* Mods modal */}
+      {modsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div
+            className="border border-stone-800 p-6 w-[28rem] max-h-[85vh] flex flex-col"
+            style={{ background: "#111114" }}
+          >
+            <div className="flex items-center justify-between mb-4 shrink-0">
+              <h2 className="text-stone-300 text-sm uppercase tracking-[0.2em] font-medium">
+                Mods
+              </h2>
+              <button
+                onClick={() => setModsOpen(false)}
+                className="text-stone-600 hover:text-stone-400 transition-colors cursor-pointer text-lg leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="w-full h-px bg-stone-800 mb-4 shrink-0" />
+
+            <div className="flex-1 overflow-hidden">
+              <ModList
+                mods={mods}
+                onToggleMod={toggleMod}
+                onEnableAll={enableAllMods}
+                onDisableAll={disableAllMods}
+              />
+            </div>
+
+            <div className="w-full h-px bg-stone-800 my-4 shrink-0" />
+
+            <button
+              onClick={() => setModsOpen(false)}
+              className="w-full py-2 border border-stone-800 text-stone-500 hover:text-stone-300 hover:border-stone-700
+                uppercase tracking-[0.15em] text-[10px] transition-colors cursor-pointer shrink-0"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Settings panel modal */}
       <SettingsPanel
@@ -117,6 +183,7 @@ function App() {
         onToggleValidation={toggleValidation}
         onClose={() => setSettingsOpen(false)}
       />
+
       <div className="fixed top-0 left-0 w-24 h-px bg-gradient-to-r from-red-900/40 to-transparent" />
       <div className="fixed top-0 left-0 w-px h-24 bg-gradient-to-b from-red-900/40 to-transparent" />
       <div className="fixed bottom-0 right-0 w-24 h-px bg-gradient-to-l from-red-900/40 to-transparent" />
