@@ -17,16 +17,6 @@ pub struct AuthResult {
 #[derive(Debug, Deserialize)]
 struct PollResponse {
     token: Option<String>,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    username: Option<String>,
-    #[serde(default)]
-    avatar: Option<String>,
-    #[serde(default)]
-    userid: Option<String>,
-    #[serde(default)]
-    user_id: Option<String>,
 }
 
 /// Start the OAuth flow using session-based polling (same as Lethe mod's LoginCoroutine).
@@ -34,7 +24,7 @@ struct PollResponse {
 pub async fn start_oauth_flow() -> Result<AuthResult, String> {
     // 1. Generate a random session ID (same algorithm as LetheHooks.GenerateSessionID)
     let session_id = generate_session_id();
-    let login_url = format!("{}/auth/login?session_id={}", AUTH_SERVER, session_id);
+    let login_url = format!("{}/auth/login?session_id={}&launcher=true", AUTH_SERVER, session_id);
 
     // 2. Open browser
     crate::lethe_log!("Opening browser: {}", login_url);
@@ -71,20 +61,17 @@ pub async fn start_oauth_flow() -> Result<AuthResult, String> {
                             .map_err(|e| format!("Failed to parse poll response: {}", e))?;
                         if let Some(t) = data.token {
                             crate::lethe_log!("Token received after {} poll(s)", attempts);
-                            // Build username and avatar from response fields
-                            let username = data.name
-                                .or(data.username)
-                                .or_else(|| data.userid.clone())
-                                .or_else(|| data.user_id.clone())
-                                .unwrap_or_default();
-                            let user_id = data.userid.or(data.user_id).unwrap_or_default();
-                            let avatar_hash = data.avatar.unwrap_or_default();
-                            let avatar_url = if !user_id.is_empty() && !avatar_hash.is_empty() {
-                                format!("https://cdn.discordapp.com/avatars/{}/{}.webp", user_id, avatar_hash)
-                            } else if !user_id.is_empty() {
-                                // Default Discord avatar based on user ID
-                                let uid: u64 = user_id.parse().unwrap_or(0);
-                                format!("https://cdn.discordapp.com/embed/avatars/{}.png", (uid >> 22) % 6)
+                            // Extract user info from JWT claims (poll only returns token)
+                            let claims = jwt_claims(&t);
+                            let user_id = claims.sub.unwrap_or_default();
+                            let username = claims.name.unwrap_or_else(|| user_id.clone());
+                            let avatar_url = if !user_id.is_empty() {
+                                if let Some(ref hash) = claims.avatar {
+                                    format!("https://cdn.discordapp.com/avatars/{}/{}.webp", user_id, hash)
+                                } else {
+                                    let uid: u64 = user_id.parse().unwrap_or(0);
+                                    format!("https://cdn.discordapp.com/embed/avatars/{}.png", (uid >> 22) % 6)
+                                }
                             } else {
                                 String::new()
                             };
@@ -114,6 +101,28 @@ pub async fn start_oauth_flow() -> Result<AuthResult, String> {
     }
 }
 
+#[derive(Debug, Default)]
+struct JwtClaims {
+    sub: Option<String>,
+    name: Option<String>,
+    avatar: Option<String>,
+}
+
+/// Extract user info from JWT payload without verification (display-only).
+fn jwt_claims(token: &str) -> JwtClaims {
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() < 2 {
+        return JwtClaims::default();
+    }
+    let decoded = base64_decode_url(parts[1]).unwrap_or_default();
+    let json: serde_json::Value = serde_json::from_str(&decoded).unwrap_or_default();
+    JwtClaims {
+        sub: json.get("sub").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        name: json.get("name").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        avatar: json.get("avatar").and_then(|v| v.as_str()).map(|s| s.to_string()),
+    }
+}
+
 fn generate_session_id() -> String {
     let mut buffer = [0u8; 32];
     rand::thread_rng().fill(&mut buffer);
@@ -139,12 +148,10 @@ pub fn load_saved_auth_from(path: &str) -> Option<AuthResult> {
     None
 }
 
-#[allow(dead_code)]
 pub fn save_auth(auth: &AuthResult) {
     save_auth_to(auth, AUTH_FILE);
 }
 
-#[allow(dead_code)]
 pub fn save_auth_to(auth: &AuthResult, path: &str) {
     if let Ok(json) = serde_json::to_string_pretty(auth) {
         let _ = std::fs::write(path, json);

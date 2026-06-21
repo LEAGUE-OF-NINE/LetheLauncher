@@ -243,10 +243,12 @@ pub fn get_auto_update_status() -> bool {
 }
 
 /// Start Discord OAuth login flow. Returns auth result with username, token, and avatar URL.
-/// The frontend decodes the JWT to extract the display name and avatar.
+/// Saves auth to disk for persistence across restarts.
 #[tauri::command]
 pub async fn start_oauth() -> Result<crate::auth::AuthResult, String> {
-    crate::auth::start_oauth_flow().await
+    let result = crate::auth::start_oauth_flow().await?;
+    crate::auth::save_auth(&result);
+    Ok(result)
 }
 
 /// Check if user is logged in (has saved token).
