@@ -16,6 +16,7 @@ const ADDITIONAL_DLLS: &[(&str, &str)] = &[
         "https://api.lethelc.site/ModularSkillScripts.dll",
         "ModularSkillScripts.dll",
     ),
+    ("https://api.lethelc.site/motions.dll", "motions.dll")
 ];
 
 #[derive(Debug, Serialize, Clone)]
