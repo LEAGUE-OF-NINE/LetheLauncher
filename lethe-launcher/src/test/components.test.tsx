@@ -123,7 +123,8 @@ describe('UpdateBanner', () => {
   const updateInfo = {
     version: '0.2.0',
     notes: 'Bug fixes and improvements',
-    download_url: 'https://example.com/update.zip',
+    download_url: 'https://example.com/LimbusCompany.exe',
+    sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
   };
 
   it('shows update available', () => {
