@@ -46,10 +46,12 @@ jobs:
         shell: powershell
         run: |
           $exe = "lethe-launcher\src-tauri\target\release\LimbusCompany.exe"
-          $zip = "LimbusCompany.zip"
 
-          # Create zip containing just the exe (no installer)
-          Compress-Archive -Path $exe -DestinationPath $zip
+          # Raw exe is the release asset the updater downloads and swaps in place.
+          Copy-Item $exe -Destination "LimbusCompany.exe" -Force
+
+          # SHA-256 the exact bytes the updater will fetch, so the client can verify.
+          $sha = (Get-FileHash "LimbusCompany.exe" -Algorithm SHA256).Hash.ToLower()
 
           # Generate latest.json for the updater
           $version = (Get-Item $exe).VersionInfo.ProductVersion
@@ -58,21 +60,23 @@ jobs:
           $latestJson = @{
             version = $version
             notes = "Release ${{ github.ref_name }}"
-            download_url = "https://github.com/${{ github.repository }}/releases/latest/download/LimbusCompany.zip"
+            download_url = "https://github.com/${{ github.repository }}/releases/latest/download/LimbusCompany.exe"
+            sha256 = $sha
           } | ConvertTo-Json
 
           $latestJson | Out-File -FilePath latest.json -Encoding utf8
 
           Write-Host "Build version: $version"
+          Write-Host "SHA-256: $sha"
           Write-Host "Artifacts:"
-          Get-ChildItem $zip, latest.json
+          Get-ChildItem "LimbusCompany.exe", latest.json
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: LimbusCompany-build-${{ github.run_number }}
           path: |
-            LimbusCompany.zip
+            LimbusCompany.exe
             latest.json
           if-no-files-found: error
           retention-days: 14
@@ -82,7 +86,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            LimbusCompany.zip
+            LimbusCompany.exe
             latest.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -96,11 +100,11 @@ jobs:
           body: |
             🚀 Automated build from commit `${{ github.sha }}`
 
-            Download `LimbusCompany.zip`, extract, and place `LimbusCompany.exe` in your game directory alongside `UnityPlayer.dll`.
+            Download `LimbusCompany.exe` and place it in your game directory alongside `UnityPlayer.dll`.
 
             The launcher will auto-detect this as the latest version via the updater.
           files: |
-            LimbusCompany.zip
+            LimbusCompany.exe
             latest.json
           prerelease: true
         env:

@@ -8,6 +8,9 @@ pub struct UpdateInfo {
     pub version: String,
     pub notes: String,
     pub download_url: String,
+    /// Lowercase hex SHA-256 of the exe at download_url. Verified before applying.
+    #[serde(default)]
+    pub sha256: String,
 }
 
 /// Check for updates by fetching the latest.json from GitHub releases.
@@ -69,10 +72,30 @@ fn is_newer(candidate: &str, current: &str) -> bool {
     a.len() > b.len()
 }
 
-/// Download and apply an update: downloads the new exe, saves it as LimbusCompany.exe.new,
-/// then returns. The launcher should exit and a restart mechanism should swap files.
+/// Compute lowercase hex SHA-256 of a byte slice.
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}
+
+/// Download, verify, and apply an update. Downloads the new exe, checks its SHA-256
+/// against the manifest, writes it as LimbusCompany.exe.new, spawns a detached script
+/// that swaps in the new exe and restarts, then exits this process so the swap can proceed.
+/// On success this function does NOT return (the process is terminated).
 pub async fn download_update(update: &UpdateInfo) -> Result<(), String> {
     crate::lethe_log!("Downloading update from {}", update.download_url);
+
+    // Refuse to apply an update we cannot verify. Older manifests without a checksum
+    // (or a tampered one that dropped it) must be installed manually.
+    if update.sha256.trim().is_empty() {
+        return Err(
+            "Update manifest is missing a SHA-256 checksum; refusing to auto-apply. \
+             Please update manually from the releases page."
+                .to_string(),
+        );
+    }
 
     let response = reqwest::get(&update.download_url)
         .await
@@ -90,6 +113,17 @@ pub async fn download_update(update: &UpdateInfo) -> Result<(), String> {
         .await
         .map_err(|e| format!("Failed to read update: {}", e))?;
 
+    // Verify integrity BEFORE writing anything to disk.
+    let actual = sha256_hex(&bytes);
+    if !actual.eq_ignore_ascii_case(update.sha256.trim()) {
+        return Err(format!(
+            "Update checksum mismatch: expected {}, got {}. Aborting.",
+            update.sha256.trim(),
+            actual
+        ));
+    }
+    crate::lethe_log!("Update checksum verified ({} bytes)", bytes.len());
+
     // Save as .new alongside the current executable
     let current_exe = std::env::current_exe()
         .map_err(|e| format!("Cannot get current exe path: {}", e))?;
@@ -98,14 +132,11 @@ pub async fn download_update(update: &UpdateInfo) -> Result<(), String> {
     std::fs::write(&new_exe, &bytes)
         .map_err(|e| format!("Failed to write update: {}", e))?;
 
-    crate::lethe_log!(
-        "Update downloaded to {}",
-        new_exe.display()
-    );
+    crate::lethe_log!("Update downloaded to {}", new_exe.display());
 
-    // Write a small batch script to replace old exe with new one and restart
-    let script_path = current_exe
-        .with_file_name("update.bat");
+    // Write a small batch script to replace old exe with new one and restart.
+    // The `timeout` gives this process time to exit and release the exe lock before `move`.
+    let script_path = current_exe.with_file_name("update.bat");
     let script = format!(
         "@echo off\r\n\
          timeout /t 2 /nobreak >nul\r\n\
@@ -121,7 +152,28 @@ pub async fn download_update(update: &UpdateInfo) -> Result<(), String> {
 
     crate::lethe_log!("Update script written to {}", script_path.display());
 
-    Ok(())
+    // Launch the swap script detached, then exit so it can overwrite our (locked) exe.
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args([
+                "/C",
+                "start",
+                "",
+                "/min",
+                &script_path.to_string_lossy(),
+            ])
+            .spawn()
+            .map_err(|e| format!("Failed to launch update script: {}", e))?;
+        crate::lethe_log!("Update script launched; exiting to apply update");
+        std::process::exit(0);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Non-Windows launcher is not shipped; nothing swaps the exe here.
+        Err("Auto-update is only supported on Windows.".to_string())
+    }
 }
 
 #[cfg(test)]
@@ -155,6 +207,19 @@ mod tests {
         assert!(!is_newer("1.0.0", "1.0.0"));
         assert!(!is_newer("0.1.5", "0.1.5"));
         assert!(!is_newer("v0.1.0", "0.1.0"));
+    }
+
+    #[test]
+    fn test_sha256_hex_known_values() {
+        // Known SHA-256 vectors; the updater rejects the download unless this matches.
+        assert_eq!(
+            sha256_hex(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
     }
 
     #[test]
