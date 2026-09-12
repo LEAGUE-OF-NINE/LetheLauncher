@@ -5,6 +5,16 @@ import { ProgressBar } from '../components/ProgressBar';
 import { FileIndicator } from '../components/FileIndicator';
 import { LoginButton, UserBadge } from '../components/LoginButton';
 import { UpdateBanner } from '../components/UpdateBanner';
+import { shouldAutoLaunch } from '../autoLaunch';
+
+describe('automatic launch', () => {
+  it('waits for authentication and validation unless validation is disabled', () => {
+    expect(shouldAutoLaunch(false, false, 'complete')).toBe(false);
+    expect(shouldAutoLaunch(true, false, 'checking')).toBe(false);
+    expect(shouldAutoLaunch(true, false, 'complete')).toBe(true);
+    expect(shouldAutoLaunch(true, true, 'idle')).toBe(true);
+  });
+});
 
 describe('StatusPanel', () => {
   it('renders the title', () => {
