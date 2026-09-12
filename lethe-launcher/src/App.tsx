@@ -10,6 +10,7 @@ import { useLauncher } from "./hooks/useLauncher";
 import { useAuth } from "./hooks/useAuth";
 import { useUpdater } from "./hooks/useUpdater";
 import { useSettings } from "./hooks/useSettings";
+import { shouldAutoLaunch } from "./autoLaunch";
 import { useEffect, useRef } from "react";
 
 function App() {
@@ -41,6 +42,7 @@ function App() {
     disableAllMods,
   } = useSettings();
   const syncStarted = useRef(false);
+  const launchStarted = useRef(false);
   const {
     phase,
     statusMessage,
@@ -62,6 +64,13 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [isAuthenticated, startSync, settings.skipValidation]);
+
+  // Match the legacy launcher: start after validation or immediately when validation is disabled.
+  useEffect(() => {
+    if (launchStarted.current || !shouldAutoLaunch(isAuthenticated, settings.skipValidation, phase)) return;
+    launchStarted.current = true;
+    void launchGame();
+  }, [isAuthenticated, launchGame, phase, settings.skipValidation]);
 
   const isDownloadPhase = phase === "downloading" && downloadProgress;
   const isCheckPhase = phase === "checking" && checkProgress;
