@@ -1,24 +1,13 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+/target/
 
-node_modules
-dist
-dist-ssr
-*.local
+# Files the launcher writes next to itself when run from this folder
+*.log
+lethe-launcher.ini
+lethe-auth.json
+lethe-file-cache.json
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?

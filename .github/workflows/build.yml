@@ -21,31 +21,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
+      # The toolchain version is pinned by lethe-launcher/rust-toolchain.toml;
+      # rustup installs it on the first cargo call below.
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dependencies
-        run: |
-          cd lethe-launcher
-          npm ci
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: lethe-launcher
 
-      - name: Build Tauri app
+      - name: Test
         run: |
           cd lethe-launcher
-          npm run tauri build
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          cargo test
+
+      - name: Build launcher
+        run: |
+          cd lethe-launcher
+          cargo build --release
 
       - name: Prepare release artifacts
         shell: powershell
         run: |
-          $exe = "lethe-launcher\src-tauri\target\release\LimbusCompany.exe"
+          $exe = "lethe-launcher\target\release\LimbusCompany.exe"
 
           # Raw exe is the release asset the updater downloads and swaps in place.
           Copy-Item $exe -Destination "LimbusCompany.exe" -Force
