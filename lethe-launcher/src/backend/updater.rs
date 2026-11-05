@@ -28,10 +28,11 @@ pub async fn check_for_updates(current_version: &str) -> Result<Option<UpdateInf
         return Ok(None);
     }
 
-    let update: UpdateInfo = response
-        .json()
+    let body = response
+        .text()
         .await
-        .map_err(|e| format!("Failed to parse update info: {}", e))?;
+        .map_err(|e| format!("Failed to read update info: {}", e))?;
+    let update = parse_update_info(&body)?;
 
     // Simple semver-ish comparison: compare version strings
     if is_newer(&update.version, current_version) {
@@ -45,6 +46,13 @@ pub async fn check_for_updates(current_version: &str) -> Result<Option<UpdateInf
         crate::lethe_log!("Already on latest version: {}", current_version);
         Ok(None)
     }
+}
+
+/// Parse latest.json. Tolerates a UTF-8 byte-order mark: Windows PowerShell
+/// adds one when writing UTF-8, and serde_json rejects it.
+fn parse_update_info(body: &str) -> Result<UpdateInfo, String> {
+    serde_json::from_str(body.trim_start_matches('\u{feff}'))
+        .map_err(|e| format!("Failed to parse update info: {}", e))
 }
 
 /// Compare two version strings. Returns true if `candidate` is greater than `current`.
@@ -179,6 +187,15 @@ pub async fn download_update(update: &UpdateInfo) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_update_info_with_or_without_bom() {
+        let json = r#"{"version":"1.0.0","notes":"n","download_url":"https://x/a.exe","sha256":"ab"}"#;
+        assert_eq!(parse_update_info(json).unwrap().version, "1.0.0");
+        let with_bom = format!("\u{feff}{}", json);
+        assert_eq!(parse_update_info(&with_bom).unwrap().version, "1.0.0");
+        assert!(parse_update_info("not json").is_err());
+    }
 
     #[test]
     fn test_version_newer() {

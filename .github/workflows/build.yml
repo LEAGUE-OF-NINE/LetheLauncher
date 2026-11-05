@@ -63,7 +63,9 @@ jobs:
             sha256 = $sha
           } | ConvertTo-Json
 
-          $latestJson | Out-File -FilePath latest.json -Encoding utf8
+          # Write UTF-8 without a byte-order mark: Out-File -Encoding utf8 adds
+          # one on Windows PowerShell, and the launcher's JSON parser rejects it.
+          [System.IO.File]::WriteAllText((Join-Path $PWD "latest.json"), $latestJson, (New-Object System.Text.UTF8Encoding $false))
 
           Write-Host "Build version: $version"
           Write-Host "SHA-256: $sha"
