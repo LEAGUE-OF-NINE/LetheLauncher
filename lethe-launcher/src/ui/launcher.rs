@@ -391,7 +391,7 @@ impl LauncherView {
 
     // ---- launching -----------------------------------------------------
 
-    fn launch(&mut self, cx: &mut Context<Self>) {
+    fn launch(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if matches!(self.update, UpdateState::Installing(_)) {
             return;
         }
@@ -409,8 +409,12 @@ impl LauncherView {
             token: self.auth.as_ref().map(|a| a.token.clone()),
         });
         cx.notify();
-        // main() starts the game once the window and event loop are gone.
-        cx.quit();
+        // Close the window rather than calling cx.quit(): it has to be torn
+        // down while the event loop is still running. After a quit, GPUI only
+        // queues the window's hide and destroy, nothing runs them, and the
+        // window stays on screen "Not Responding" while the game runs. Closing
+        // the last window quits the app; main() then starts the game.
+        window.remove_window();
     }
 
     // ---- self-update ---------------------------------------------------
@@ -821,7 +825,7 @@ impl LauncherView {
                     big_button("start", "Start game")
                         .primary()
                         .disabled(installing)
-                        .on_click(cx.listener(|this, _, _, cx| this.launch(cx)))
+                        .on_click(cx.listener(|this, _, window, cx| this.launch(window, cx)))
                         .into_any_element()
                 }
                 SyncState::Idle => {
@@ -829,7 +833,7 @@ impl LauncherView {
                     big_button("start", "Start game")
                         .primary()
                         .disabled(installing)
-                        .on_click(cx.listener(|this, _, _, cx| this.launch(cx)))
+                        .on_click(cx.listener(|this, _, window, cx| this.launch(window, cx)))
                         .into_any_element()
                 }
             }
@@ -852,9 +856,9 @@ impl LauncherView {
                 .cursor_pointer()
                 .hover(|s| s.text_color(theme::gold().opacity(0.8)))
                 .child(format!("{}  \u{2192}", theme::label_text(label)))
-                .on_click(cx.listener(move |this, _, _, cx| match id {
+                .on_click(cx.listener(move |this, _, window, cx| match id {
                     "cancel-login" => this.cancel_login(cx),
-                    _ => this.launch(cx),
+                    _ => this.launch(window, cx),
                 }))
         });
 
